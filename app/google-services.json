@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "242628686304",
+    "project_id": "evidencija-studenata",
+    "storage_bucket": "evidencija-studenata.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:242628686304:android:81962c12d9f3cc73eefb85",
+        "android_client_info": {
+          "package_name": "com.example.evidencijastudenata"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbjpuYZW9nPXmXaT3MHD3Z42Ow5A1owOA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
