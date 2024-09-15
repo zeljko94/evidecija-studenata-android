@@ -11,6 +11,7 @@ class SubjectRepository {
     private val subjectsCollection = db.collection("subjects")
     private val lecturesCollection = db.collection("lectures")
     private val attendancesCollection = db.collection("attendances")
+    private val studentSubjectCollection = db.collection("student_subjects")
 
     suspend fun getSubjectById(subjectId: String): Subject? {
         return try {
@@ -52,6 +53,11 @@ class SubjectRepository {
 
             // Delete related attendances
             attendancesCollection.whereEqualTo("subjectId", subjectId).get().await().forEach { doc ->
+                doc.reference.delete().await()
+            }
+
+            // Delete related StudentSubject entries
+            studentSubjectCollection.whereEqualTo("subjectId", subjectId).get().await().forEach { doc ->
                 doc.reference.delete().await()
             }
 

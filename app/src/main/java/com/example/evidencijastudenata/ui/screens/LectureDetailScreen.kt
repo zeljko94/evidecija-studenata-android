@@ -4,12 +4,14 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothSocket
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,12 +23,12 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.example.evidencijastudenata.data.model.Attendance
+import com.example.evidencijastudenata.data.model.Student
 import com.example.evidencijastudenata.data.repository.AttendanceRepository
 import com.example.evidencijastudenata.data.repository.LectureRepository
 import com.example.evidencijastudenata.data.repository.StudentRepository
@@ -47,11 +49,14 @@ private val MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
 @Composable
 fun LectureDetailScreen(navController: NavController, lectureId: String) {
-    var lectureDetails by remember { mutableStateOf<String?>(null) }
+    var lectureName by remember { mutableStateOf<String?>(null) }
     var attendanceData by remember { mutableStateOf<List<Attendance>>(emptyList()) }
     var totalStudents by remember { mutableStateOf(0) }
     var cardUid by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var attendanceToDelete by remember { mutableStateOf<Attendance?>(null) }
+
     val coroutineScope = rememberCoroutineScope()
     val lectureRepository = remember { LectureRepository() }
     val attendanceRepository = remember { AttendanceRepository() }
@@ -65,11 +70,14 @@ fun LectureDetailScreen(navController: NavController, lectureId: String) {
 
     fun logAttendance(cardUid: String) {
         coroutineScope.launch {
-            if(cardUid.isNotEmpty()) {
+            if (cardUid.isNotEmpty()) {
                 try {
                     val student = studentRepository.getStudentByCardUid(cardUid)
                     if (student != null) {
-                        val currentTimestamp = SimpleDateFormat("dd.MM.yyyy. HH:mm:ss", Locale.getDefault()).format(Date())
+                        val currentTimestamp =
+                            SimpleDateFormat("dd.MM.yyyy. HH:mm:ss", Locale.getDefault()).format(
+                                Date()
+                            )
 
                         val attendance = Attendance(
                             id = UUID.randomUUID().toString(),
@@ -77,21 +85,26 @@ fun LectureDetailScreen(navController: NavController, lectureId: String) {
                             userName = student.name,
                             userSurname = student.surname,
                             lectureId = lectureId,
-                            timestamp = currentTimestamp
+                            timestamp = currentTimestamp,
+                            lectureName = lectureName ?: ""
                         )
                         attendanceRepository.logAttendance(attendance)
+                        Log.d("ATTENDANCE ADDED", attendance.toString())
 
-
-                        Toast.makeText(context, "Dolazak zabilježen: $cardUid", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Dolazak zabilježen: $cardUid", Toast.LENGTH_SHORT)
+                            .show()
 
                         attendanceData = attendanceRepository.getAttendancesByLecture(lectureId)
                             .sortedByDescending { it.timestamp }
                     } else {
-                        Toast.makeText(context, "Student nije pronađen u bazi: $cardUid", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            "Student nije pronađen u bazi: $cardUid",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
-                }
-                catch (e: Exception) {
-                    Log.d("ERROR", e.toString());
+                } catch (e: Exception) {
+                    Log.d("ERROR", e.toString())
                     Toast.makeText(context, "Došlo je do pogreške!", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -119,13 +132,6 @@ fun LectureDetailScreen(navController: NavController, lectureId: String) {
     }
 
     fun connectToBluetoothDevice(deviceName: String) {
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
         bluetoothAdapter?.bondedDevices?.find { it.name == deviceName }?.let { device ->
             coroutineScope.launch(Dispatchers.IO) {
                 try {
@@ -134,29 +140,39 @@ fun LectureDetailScreen(navController: NavController, lectureId: String) {
                     listenForUID(bluetoothSocket!!)
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Povezivanje s bluetooth uređajem nije uspjelo", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            "Povezivanje s bluetooth uređajem nije uspjelo",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                     e.printStackTrace()
                 }
             }
-        } ?: run {
-//            Toast.makeText(context, "Bluetooth uređaj nije pronađen", Toast.LENGTH_SHORT).show()
         }
     }
 
     LaunchedEffect(lectureId) {
-        val lecture = lectureRepository.getLectureDetails(lectureId)
-        lectureDetails = lecture?.name ?: "Unknown"
-        attendanceData = attendanceRepository.getAttendancesByLecture(lectureId)
-            .sortedByDescending { it.timestamp }
-        totalStudents = lecture?.totalStudents ?: 0
-    }
-
-    BluetoothPermissionHandler {
         connectToBluetoothDevice("ESP32_NFC")
+
+        isLoading = true
+        try {
+            val lecture = lectureRepository.getLectureDetails(lectureId)
+            lectureName = lecture?.name ?: "Unknown"
+            attendanceData = attendanceRepository.getAttendancesByLecture(lectureId)
+                .sortedByDescending { it.timestamp }
+            Log.d("FETCH ATTENDANCE ON LAUNCH", attendanceData.toString())
+            totalStudents = lecture?.totalStudents ?: 0
+        } finally {
+            isLoading = false
+        }
     }
 
-    fun exportAttendanceToExcel(context: Context, attendances: List<Attendance>, onCompletion: () -> Unit) {
+    fun exportAttendanceToExcel(
+        context: Context,
+        attendances: List<Attendance>,
+        onCompletion: () -> Unit
+    ) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val workbook = XSSFWorkbook()
@@ -178,7 +194,8 @@ fun LectureDetailScreen(navController: NavController, lectureId: String) {
                     row.createCell(4).setCellValue(attendance.timestamp)
                 }
 
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val downloadsDir =
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val fileName = "Prisutnost_${System.currentTimeMillis()}.xlsx"
                 val file = File(downloadsDir, fileName)
                 val outputStream = FileOutputStream(file)
@@ -187,13 +204,21 @@ fun LectureDetailScreen(navController: NavController, lectureId: String) {
                 workbook.close()
 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Dokument exportiran: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        context,
+                        "Dokument exportiran: ${file.absolutePath}",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
 
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Greška prilikom exportiranja podataka u Excel", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        "Greška prilikom exportiranja podataka u Excel",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             } finally {
                 withContext(Dispatchers.Main) {
@@ -204,16 +229,21 @@ fun LectureDetailScreen(navController: NavController, lectureId: String) {
     }
 
     // Permission launcher to request WRITE_EXTERNAL_STORAGE permission
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) {
-            isLoading = true
-            exportAttendanceToExcel(context, attendanceData) {
-                isLoading = false
+    val permissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                isLoading = true
+                exportAttendanceToExcel(context, attendanceData) {
+                    isLoading = false
+                }
+            } else {
+                Toast.makeText(
+                    context,
+                    "Permission denied. Cannot export file.",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
-        } else {
-            Toast.makeText(context, "Permission denied. Cannot export file.", Toast.LENGTH_SHORT).show()
         }
-    }
 
     Scaffold(
         floatingActionButton = {
@@ -266,39 +296,76 @@ fun LectureDetailScreen(navController: NavController, lectureId: String) {
                     0f
                 }
                 Text(
-                    text = "Detalji o predavanju - Prisustvo: ${"%.2f".format(attendancePercentage)}%",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp) // Adjusted padding
+                    text = "Procenat prisutnosti: ${"%.2f".format(attendancePercentage)}%",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
 
-            items(attendanceData) { attendance ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp) // Adjusted padding
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(8.dp)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(text = "Ime: ${attendance.userName}")
-                            Text(text = "Prezime: ${attendance.userSurname}")
-                            Text(text = "Email: ${attendance.userEmail}")
-                            Text(text = "Datum: ${attendance.timestamp}")
+            item {
+                attendanceData.forEach { attendance ->
+                    AttendanceCard(
+                        attendance = attendance,
+                        onLongPress = {
+                            attendanceToDelete = attendance
+                            showDeleteDialog = true
                         }
-                    }
+                    )
                 }
             }
+
+        }
+
+        // Dialog for confirming attendance deletion
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                title = { Text("Brisanje prisutnosti") },
+                text = { Text("Jeste li sigurni da želite izbrisati ovu prisutnost?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            isLoading = true
+                            CoroutineScope(Dispatchers.IO).launch {
+                                attendanceRepository.deleteAttendance(attendanceToDelete!!.id)
+                                attendanceData =
+                                    attendanceRepository.getAttendancesByLecture(lectureId)
+                                        .sortedByDescending { it.timestamp }
+                                withContext(Dispatchers.Main) {
+                                    showDeleteDialog = false
+                                    isLoading = false
+                                    Toast.makeText(
+                                        context,
+                                        "Prisutnost izbrisana",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Da")
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { showDeleteDialog = false }) {
+                        Text("Ne")
+                    }
+                }
+            )
         }
     }
 }
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AttendanceCard(attendance: Attendance) {
+fun AttendanceCard(attendance: Attendance, onLongPress: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { /* Handle student click if needed */ },
+                onLongClick = { onLongPress() }
+            )
+            .padding(4.dp),
         elevation = CardDefaults.elevatedCardElevation(4.dp),
         shape = MaterialTheme.shapes.medium
     ) {
@@ -312,29 +379,6 @@ fun AttendanceCard(attendance: Attendance) {
                 text = "Vrijeme dolaska: ${attendance.timestamp}",
                 style = MaterialTheme.typography.bodyMedium
             )
-        }
-    }
-}
-
-@Composable
-fun BluetoothPermissionHandler(
-    onPermissionGranted: () -> Unit
-) {
-    val context = LocalContext.current
-
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) {
-            onPermissionGranted()
-        } else {
-            Toast.makeText(context, "Permission denied", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-        onPermissionGranted()
-    } else {
-        SideEffect {
-            permissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
         }
     }
 }

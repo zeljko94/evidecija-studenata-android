@@ -4,6 +4,7 @@ data class Attendance(
     val studentId: String = "",
     val userName: String = "",
     val userSurname: String = "",
+    val lectureName: String = "",
     val userEmail: String = "",
     val lectureId: String = "",
     val timestamp: String = ""

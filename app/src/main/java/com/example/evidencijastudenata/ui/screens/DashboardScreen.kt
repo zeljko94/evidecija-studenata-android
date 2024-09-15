@@ -59,6 +59,7 @@ fun DashboardScreen(navController: NavController) {
     val auth = FirebaseAuth.getInstance()
     val subjectRepository = remember { SubjectRepository() }
     val userRepository = remember { UserRepository() }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         isLoading = true
@@ -79,16 +80,14 @@ fun DashboardScreen(navController: NavController) {
             confirmButton = {
                 Button(onClick = {
                     isLoading = true
-                    CoroutineScope(Dispatchers.IO).launch {
+                    coroutineScope.launch {
                         subjectToDelete?.let {
                             subjectRepository.deleteSubject(it.id)
                             // Update subjects list
                             subjects = subjectRepository.getSubjects(auth.currentUser?.uid ?: "")
                         }
-                        withContext(Dispatchers.Main) {
-                            showDeleteDialog = false
-                            isLoading = false
-                        }
+                        isLoading = false
+                        showDeleteDialog = false
                     }
                 }) {
                     Text("Da")
@@ -106,8 +105,10 @@ fun DashboardScreen(navController: NavController) {
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
             isLoading = true
-            exportSubjectsToExcel(context, subjects) {
-                isLoading = false
+            coroutineScope.launch {
+                exportSubjectsToExcel(context, subjects) {
+                    isLoading = false
+                }
             }
         } else {
             Toast.makeText(context, "Permission denied. Cannot export file.", Toast.LENGTH_SHORT).show()
@@ -196,7 +197,6 @@ fun DashboardScreen(navController: NavController) {
                         LazyColumn {
                             items(subjects) { subject ->
                                 SubjectCard(subject = subject, onClick = {
-                                    Log.d("DashboardScreen", "SubjectCard clicked: ${subject.id}")
                                     navController.navigate("subject_detail/${subject.id}")
                                 }, onLongPress = {
                                     subjectToDelete = subject

@@ -220,7 +220,7 @@ fun StudentCard(student: Student, onLongPress: () -> Unit) {
                 onClick = { /* Handle student click if needed */ },
                 onLongClick = { onLongPress() }
             )
-            .padding(8.dp)
+            .padding(4.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp)) {
             Column {

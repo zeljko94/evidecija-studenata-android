@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.evidencijastudenata.data.model.Lecture
 import com.example.evidencijastudenata.data.repository.LectureRepository
+import com.example.evidencijastudenata.data.repository.SubjectRepository
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -22,17 +23,17 @@ fun AddLectureScreen(navController: NavController, subjectId: String) {
     val lectureNameState = remember { mutableStateOf("") }
     val dateState = remember { mutableStateOf("") }
     val durationState = remember { mutableStateOf("") }
-    val totalStudentsState = remember { mutableStateOf("") }
 
     // Validation states
     val isLectureNameValid by remember { derivedStateOf { lectureNameState.value.isNotEmpty() } }
     val isDateValid by remember { derivedStateOf { dateState.value.matches(Regex("\\d{2}\\.\\d{2}\\.\\d{4}")) } }
     val isDurationValid by remember { derivedStateOf { durationState.value.toIntOrNull() != null } }
-    val isTotalStudentsValid by remember { derivedStateOf { totalStudentsState.value.toIntOrNull() != null } }
-    val isFormValid by remember { derivedStateOf { isLectureNameValid && isDateValid && isDurationValid && isTotalStudentsValid } }
+    val isFormValid by remember { derivedStateOf { isLectureNameValid && isDateValid && isDurationValid } }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    val lectureRepository = LectureRepository()
+    val lectureRepository =  remember { LectureRepository() }
+    val subjectRepository =  remember { SubjectRepository() }
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -79,31 +80,33 @@ fun AddLectureScreen(navController: NavController, subjectId: String) {
         if (!isDurationValid) {
             Text("Trajanje mora biti broj", color = MaterialTheme.colorScheme.error)
         }
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = totalStudentsState.value,
-            onValueChange = { totalStudentsState.value = it },
-            label = { Text("Broj studenata") },
-            modifier = Modifier.fillMaxWidth(),
-            isError = !isTotalStudentsValid
-        )
-        if (!isTotalStudentsValid) {
-            Text("Broj studenata mora biti broj", color = MaterialTheme.colorScheme.error)
-        }
         Spacer(modifier = Modifier.height(16.dp))
+
+//        OutlinedTextField(
+//            value = totalStudentsState.value,
+//            onValueChange = { totalStudentsState.value = it },
+//            label = { Text("Broj studenata") },
+//            modifier = Modifier.fillMaxWidth(),
+//            isError = !isTotalStudentsValid
+//        )
+//        if (!isTotalStudentsValid) {
+//            Text("Broj studenata mora biti broj", color = MaterialTheme.colorScheme.error)
+//        }
+//        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {
                 if (isFormValid) {
                     scope.launch {
+                        val subject = subjectRepository.getSubjectById(subjectId)
+
                         val newLecture = Lecture(
                             id = UUID.randomUUID().toString(),
                             subjectId = subjectId,
                             name = lectureNameState.value,
                             date = dateState.value,
                             duration = durationState.value.toInt(),
-                            totalStudents = totalStudentsState.value.toInt()
+                            totalStudents = subject?.numberOfStudents ?: 0
                         )
                         lectureRepository.addLecture(newLecture)
                         Toast.makeText(context, "Predavanje uspješno dodano", Toast.LENGTH_SHORT).show()
